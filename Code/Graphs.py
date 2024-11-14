@@ -2,7 +2,14 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-GROUPING_THRESHOLD = 0.3E-3
+GROUPING_THRESHOLD = 0.2E-3
+#create a new folder in Graphs with timestamp
+import os
+import time
+timestamp = time.strftime("%Y%m%d-%H%M%S")
+SAVE_FOLDER = f'Graphs/{timestamp}'
+os.makedirs(SAVE_FOLDER)
+
 
 # Load the data
 radiuses_df = pd.read_csv('Data/Radiuses.csv', header=None, names=['Particle', 'Radius'])
@@ -13,14 +20,17 @@ print("Data loaded")
 radiuses_df['Radius_Group'] = (radiuses_df['Radius'] // GROUPING_THRESHOLD) * GROUPING_THRESHOLD
 print("Radii rounded")
 
+# Filter out groups with radius bigger than 0.3E-3
+filtered_radiuses_df = radiuses_df[radiuses_df['Radius_Group'] < 2.8E-3]
+
 # Group particles by their radius group
-grouped_radiuses = radiuses_df.groupby('Radius_Group')
+grouped_radiuses = filtered_radiuses_df.groupby('Radius_Group')
 print("Particles grouped by radius")
 
 # Print the groups and their indices
 print("Groups and their indices:")
-for name, group in grouped_radiuses.groups.items():
-    print(f"Group: {name}, Indices: {group}")
+for name, group in grouped_radiuses:
+    print(f"Group: {name}, Indices: {group.index.tolist()}")
 
 # Print the first few rows of each group
 print("\nSnapshot of each group:")
@@ -68,20 +78,22 @@ for radius_group, group in grouped_radiuses:
     plt.figure()
     plt.scatter(valid_time, valid_avg_displacement_squared, label=f'Radius Group: {radius_group:.1E}')
     
-    # Calculate the slope and intercept of the fitted line
-    slope, intercept = np.polyfit(valid_time, valid_avg_displacement_squared, 1)
-    fitted_line = slope * valid_time + intercept
+    # Fit the line forcing the intercept to be zero
+    A = valid_time[:, np.newaxis]  # Reshape time to be a 2D array
+    slope, _, _, _ = np.linalg.lstsq(A, valid_avg_displacement_squared, rcond=None)
+    slope = slope[0]
+    fitted_line = slope * valid_time
     
     # Plot the fitted line
     plt.plot(valid_time, fitted_line, label=f'Fitted Line: {radius_group:.1E}', linestyle='--')
-    print(f"group {radius_group:.1E}: {slope:.2E}x + {intercept:.2E}")
+    print(f"group {radius_group:.1E}: {slope:.2E}x + 0")
     plt.xlabel('Time')
     plt.ylabel('Average Displacement Squared')
     plt.legend()
     upper_bound = radius_group + GROUPING_THRESHOLD
     plt.title(f'Avg Displacement Squared vs Time \n for Radius Group {radius_group:.1E}-{upper_bound:.1E} (Sample Size: {sample_size})')
-    plt.savefig(f'Graphs/avg_displacement_squared_{radius_group:.1E}.png')
-    # plt.show()  # Display the plot
+    plt.savefig(f'{SAVE_FOLDER}/avg_displacement_squared_{radius_group:.1E}_{timestamp}.png')
+    plt.close()
 
     slopes.append(slope)
     radius_groups.append(radius_group)
@@ -90,7 +102,12 @@ for radius_group, group in grouped_radiuses:
 inverse_slopes = 1 / np.array(slopes)
 plt.figure()
 plt.scatter(radius_groups, inverse_slopes)
+
+# Add labels to each point
+for i, radius_group in enumerate(radius_groups):
+    plt.text(radius_group, inverse_slopes[i], f'{radius_group:.1E}', fontsize=9, ha='right')
+
 plt.xlabel('Particle Radius')
 plt.ylabel('Inverse of Slope')
-plt.savefig('Graphs/inverse_slopes.png')
+plt.savefig(f'{SAVE_FOLDER}/inverse_slopes_{timestamp}.png')
 # plt.show()  # Display the plot
