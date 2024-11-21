@@ -15,8 +15,10 @@ LOCATION_DATA = ['Data/Edited_Data.csv',
                  'Data\Week_2\outputs_10-percent_1\progress.csv',
                  'Data\Week_2\outputs_20-percent_1\progress.csv',
                  'Data\Week_2\outputs_30-percent_1\progress.csv',
-                 'Data\Week_2\outputs_40-percent_1\progress.csv']
+                 'Data\Week_2\outputs_40-percent_1\progress.csv',
+                 'Data\Week_2\outputs_50-percent_1\progress.csv']
 RADIUS_DATA = ['Data/Radiuses.csv',
+               'Data\Week_2\Radii.csv',
                'Data\Week_2\Radii.csv',
                'Data\Week_2\Radii.csv',
                'Data\Week_2\Radii.csv',
