@@ -1,188 +1,195 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import os
+import time
+
 
 GROUPING_THRESHOLD = 0.15E-6 #m
 MAXIMUM_RADIUS = 2.8E-6 #m
+MINIMUM_RADIUS = 1.2E-6 #m
 PIXEL_SIZE = 0.102E-6 #m
+MAX_WINDOW_SIZE = 10
+PARTICLES_TO_PLOT = 3
 
-#create a new folder in Graphs with timestamp
-import os
-import time
+
+# Create a new folder in Graphs with timestamp
 timestamp = time.strftime("%Y%m%d-%H%M%S")
 SAVE_FOLDER = f'Graphs/{timestamp}'
 os.makedirs(SAVE_FOLDER)
-
 
 # Load the data
 radiuses_df = pd.read_csv('Data/Radiuses.csv', header=None, names=['Particle', 'Radius'])
 data_df = pd.read_csv('Data/Edited_Data.csv')
 print("Data loaded")
 
-# convert radiuses to meters from mm
+# Convert radiuses to meters from mm
 radiuses_df['Radius'] = radiuses_df['Radius'] * 1E-3
+
+
 
 # Convert pixel measurements to millimeters
 for col in data_df.columns:
     if col.startswith('Point-') and (col.endswith('X') or col.endswith('Y')):
         data_df[col] = data_df[col] * PIXEL_SIZE
 
-# Round down the radii to the nearest grouping threshold
-radiuses_df['Radius_Group'] = (radiuses_df['Radius'] // GROUPING_THRESHOLD) * GROUPING_THRESHOLD
-print("Radii rounded")
+# Function to calculate average displacement squared over time for a given window size
+def calculate_avg_displacement_squared(particle, data_df, window_size):
+    
+    x_col = f'Point-{particle} X'
+    y_col = f'Point-{particle} Y'
+    if x_col in data_df.columns and y_col in data_df.columns:
+        x = data_df[x_col].values
+        y = data_df[y_col].values
+        
+        displacements_squared = []
+        start = 0
+        #print(f"WIndow size: {window_size}")
+        while start + window_size < len(x):
+            
+            x_slice = x[start:(start + window_size)]
+            y_slice = y[start:(start + window_size)]
+  
+            displacements_squared.append((x_slice[-1] - x_slice[0])**2 + (y_slice[-1] - y_slice[0])**2)
+            start += window_size   
+            
+            #print(f"Displacement squared: {displacements_squared}")
+            
+        
+        avg_displacement_squared = np.nanmean(displacements_squared)
+        std_error = np.nanstd(displacements_squared) / np.sqrt(np.sum(~np.isnan(displacements_squared)))  # Standard error of the mean
+        
+        #print(f'Average displacement squared for particle {particle} with window size {window_size} is {avg_displacement_squared}')
+        return avg_displacement_squared, std_error
+    else:
+        #print(f'Columns {x_col} or {y_col} not found in data for particle {particle}')
+        return None
 
-# Filter out groups with radius bigger than 
-filtered_radiuses_df = radiuses_df[radiuses_df['Radius_Group'] < MAXIMUM_RADIUS]
+# Calculate and plot average displacement squared over time for each particle and window size
+particles = radiuses_df['Particle'].values
+window_sizes = range(2, MAX_WINDOW_SIZE + 1)
 
-# Group particles by their radius group
-grouped_radiuses = filtered_radiuses_df.groupby('Radius_Group')
-print("Particles grouped by radius")
 
-# Print the groups and their indices
-print("Groups and their indices:")
-for name, group in grouped_radiuses:
-    print(f"Group: {name}, Indices: {group.index.tolist()}")
 
-# Print the first few rows of each group
-print("\nSnapshot of each group:")
-for name, group in grouped_radiuses:
-    print(f"\nGroup: {name}")
-    print(group.head())
+slopes_df = pd.DataFrame(columns=['Particle','Radius', 'Slope'])
 
-# Function to calculate average displacement squared over time
-def calculate_avg_displacement_squared(group, data_df):
-    particles = group['Particle'].values
-    displacements_squared = []
-
-    for particle in particles:
-        x_col = f'Point-{particle} X'
-        y_col = f'Point-{particle} Y'
-        if x_col in data_df.columns and y_col in data_df.columns:
-            x = data_df[x_col].values
-            y = data_df[y_col].values
-            displacement_squared = (x - x[0])**2 + (y - y[0])**2
-            displacements_squared.append(displacement_squared)
-
-    avg_displacement_squared = np.mean(displacements_squared, axis=0)
-    return avg_displacement_squared
-
-# Calculate and plot average displacement squared over time for each radius group
-slopes = []
-radius_groups = []
-sample_sizes = []
-groups = []
 
 plt.figure()
 
-for radius_group, group in grouped_radiuses:
-    avg_displacement_squared = calculate_avg_displacement_squared(group, data_df)
-    time = data_df['time'].values
-
-    # Filter out NaN values
-    valid_indices = ~np.isnan(avg_displacement_squared)
-    valid_time = time[valid_indices]
-    valid_avg_displacement_squared = avg_displacement_squared[valid_indices]
-
-    # Calculate the sample size as the number of particles in the group
-    sample_size = len(group)
-
-    if len(valid_time) < 2:
-        print(f"Skipping group {radius_group:.1E} due to insufficient valid data points")
+count = 0
+for particle in particles:
+    radius = radiuses_df.loc[radiuses_df['Particle'] == particle, 'Radius'].values[0]
+    
+    #check if particle is in the data
+    if f'Point-{particle} X' not in data_df.columns:
+        #print(f'Particle {particle} not found in data')
         continue
     
-    if (sample_size >= 2):
+    
+    if radius > MAXIMUM_RADIUS or radius < MINIMUM_RADIUS:
+        print(f'Skipping particle {particle} with radius {radius} (greater than MAXIMUM_RADIUS)')
+        continue
+    print(f'Calculating avg displacement squared for particle {particle} with radius {radius}')
+    
+    avg_displacements = []
+    errors = []
+    for window_size in window_sizes:
+        #print(f'******************\nCalculating avg displacement squared for particle {particle} with window size {window_size}\n*********************')
+        avg_displacement_squared, std_error = calculate_avg_displacement_squared(particle, data_df, window_size)
+        #if avg_displacement_squared is not None:
+        avg_displacements.append(avg_displacement_squared)
+        errors.append(std_error)
+    
+    if avg_displacements:  # Ensure avg_displacements is not empty
+    
+        # fit a line to the data, force the intercept to be 0
+        x = np.array(window_sizes[:len(avg_displacements)])
+        y = np.array(avg_displacements)
         
-        groups.append((radius_group, valid_time, valid_avg_displacement_squared, sample_size))
-
-    # Plot individual graphs for each group
-    plt.figure()
-    plt.scatter(valid_time, valid_avg_displacement_squared, label=f'Group: {radius_group:.1E} (n={sample_size})')
+        # Include the origin point (0, 0)
+        x = np.insert(x, 0, 0)
+        y = np.insert(y, 0, 0)
+        
+        
+        # Reshape x for lstsq
+        x = x[:, np.newaxis]
+        
+        # Use lstsq to fit the data with intercept forced to 0
+        m, _, _, _ = np.linalg.lstsq(x, y, rcond=None)
+        m = m[0]
+        
+        # calculate the error of the fit
+        # Calculate the fitted values
+        y_fit = m * x.flatten()
+        
+        # Calculate the residuals
+        residuals = y - y_fit
+        
+        # Calculate the standard error of the regression
+        residual_sum_of_squares = np.sum(residuals**2)
+        degrees_of_freedom = len(y) - 1  # Number of observations minus number of parameters
+        fit_error = np.sqrt(residual_sum_of_squares / degrees_of_freedom) / (np.sqrt(degrees_of_freedom+1))
+        
+        if count % PARTICLES_TO_PLOT == 0 and max(errors) < 25E-14:
+            
+            scatter = plt.scatter(window_sizes[:len(avg_displacements)], avg_displacements, label=f'P: {particle}, R:{radius:.2e}', s=5)
+            color = scatter.get_facecolor()[0]  # Get the color of the scatter plot
+            plt.errorbar(window_sizes[:len(avg_displacements)], avg_displacements, yerr=errors, fmt='o', color=color, capsize=5)
+            plt.plot(x, m*x, label=f'Fit: y = {m:.2e}x', linestyle='--', color=color)
+        count += 1    
+        
+        # Add the slope to the dataframe
+        print(f"particle: {particle} max error: {max(errors)} <? {15.E-14} slope: {m} <? {10E-14}")
+        if m > 5E-14 and (max(errors) < 25E-14):
+            new_row = pd.DataFrame({'Particle': [particle], 'Radius': [radius], 'Slope': [m], 'Fit Error': [fit_error]})
+            slopes_df = pd.concat([slopes_df, new_row], ignore_index=True)
+        else:
+            print(f"particle {particle} not added to slopes_df")
+            
+        
     
-    # Fit the line forcing the intercept to be zero
-    A = valid_time[:, np.newaxis]  # Reshape time to be a 2D array
-    slope, _, _, _ = np.linalg.lstsq(A, valid_avg_displacement_squared, rcond=None)
-    slope = slope[0]
-    fitted_line = slope * valid_time
     
-    # Plot the fitted line
-    plt.plot(valid_time, fitted_line, linestyle='--')
-    print(f"group {radius_group:.1E}: {slope:.2E}x + 0")
-    plt.xlabel('Time (s)')
-    plt.ylabel('Average Displacement Squared (m^2)')
-    plt.legend()
-    plt.title(f'Avg Displacement Squared vs Time \n for Radius Group {radius_group:.1E} (Sample Size: {sample_size})')
-    plt.savefig(f'{SAVE_FOLDER}/avg_displacement_squared_{radius_group:.1E}_{timestamp}.png')
-    plt.close()
 
-    slopes.append(slope)
-    radius_groups.append(radius_group)
-    sample_sizes.append(sample_size)
-
-# Initialize a single figure for the unified graph
-plt.figure()
-
-# Assuming you have a list of groups with their respective data
-for radius_group, valid_time, valid_avg_displacement_squared, sample_size in groups:
-    # Plot the data points with smaller markers
-    diff = radius_group + GROUPING_THRESHOLD
-    plt.scatter(valid_time, valid_avg_displacement_squared, label=f'{radius_group:.2E}m-{diff:.2E}m (n={sample_size})', s=3)
-    
-    # Fit the line forcing the intercept to be zero
-    A = valid_time[:, np.newaxis]  # Reshape time to be a 2D array
-    slope, _, _, _ = np.linalg.lstsq(A, valid_avg_displacement_squared, rcond=None)
-    slope = slope[0]
-    fitted_line = slope * valid_time
-    
-    # Plot the fitted line with the same color as the data points
-    plt.plot(valid_time, fitted_line, linestyle='--')
-    #print(f"group {radius_group:.1E}: {slope:.2E}x + 0")
-
-# Add labels, legend, and title to the unified graph
-plt.xlabel('Time (s)')
+plt.xlabel('Frame (1/3 s)')
 plt.ylabel('Average Displacement Squared (m^2)')
 plt.legend(fontsize='small')
-plt.title('Avg Displacement Squared vs Time for All Radius Groups')
+plt.title('Avg Displacement Squared vs time')
+plt.savefig(f'{SAVE_FOLDER}/avg_displacement_squared_all_particles_{timestamp}.png', dpi=300)
 
-# Save the unified graph
-plt.savefig(f'{SAVE_FOLDER}/avg_displacement_squared_all_groups_{timestamp}.png', dpi = 300)
-plt.close()
+# Calculate 1/slope and add it to the dataframe
+slopes_df['Inverse Slope'] = 1 / slopes_df['Slope']
+slopes_df['Inverse Slope Error'] = slopes_df['Fit Error'] / (slopes_df['Slope'] ** 2)
 
-# Filter out slopes with sample size less than two
-filtered_slopes = []
-filtered_radius_groups = []
-
-for slope, radius_group in zip(slopes, radius_groups):
-    group = grouped_radiuses.get_group(radius_group)
-    sample_size = len(group)
-    if sample_size >= 2:
-        filtered_slopes.append(slope)
-        filtered_radius_groups.append(radius_group)
-    else:
-        print(f"Skipping group {radius_group:.1E} due to insufficient sample size")
-        
-
-# Plot the inverse of the filtered slopes as a function of the particle radius
-inverse_slopes = 1 / np.array(filtered_slopes)
+# Plot 1/slope as a function of the radius
 plt.figure()
+#plt.scatter(slopes_df['Radius'], slopes_df['Inverse Slope'], marker='o', linestyle='-')
+plt.errorbar(slopes_df['Radius'], slopes_df['Inverse Slope'], yerr=slopes_df['Inverse Slope Error'], fmt='o', capsize=5)
+plt.xlabel('Radius (m)')
+plt.ylabel('1/Slope (s/m^2)')
+plt.title('1/Slope vs Radius')
 
-# Use a colormap to assign different colors to each point
-cmap = plt.get_cmap('viridis')
-colors = cmap(np.linspace(0, 1, len(filtered_radius_groups)))
+# Fit a line to the data with intercept forced to 0
+x = slopes_df['Radius'].values
+y = slopes_df['Inverse Slope'].values
 
-# Plot each point with a different color
-for i, radius_group in enumerate(filtered_radius_groups):
-    plt.scatter(radius_group, inverse_slopes[i], color=colors[i], s=20, label=f'{radius_group:.2E}m')
+# Include the origin point (0, 0)
+x = np.insert(x, 0, 0)
+y = np.insert(y, 0, 0)
+# Reshape x for lstsq
+x = x[:, np.newaxis]
 
-# Fit a line to the data
-coefficients = np.polyfit(filtered_radius_groups, inverse_slopes, 1)
-fitted_line = np.polyval(coefficients, filtered_radius_groups)
-plt.plot(filtered_radius_groups, fitted_line, linestyle='--', color='red', label=f'Fit: {coefficients[0]:.2E}x + {coefficients[1]:.2E}')
+# Use lstsq to fit the data with intercept forced to 0
+m, _, _, _ = np.linalg.lstsq(x, y, rcond=None)
+m = m[0]
 
-# Add legend
+# Calculate the fitted values
+y_fit = m * x.flatten()
+
+
+plt.plot(x, m*x, label=f'Fit: y = {m:.2e}x', linestyle='--')
 plt.legend()
+plt.savefig(f'{SAVE_FOLDER}/inverse_slope_vs_radius_{timestamp}.png', dpi=300)
+plt.show()
 
-plt.xlabel('Particle Radius (m)')
-plt.ylabel('Inverse of Slope (s/m^2)')
-plt.title('Inverse of Slope vs Particle Radius')
-plt.savefig(f'{SAVE_FOLDER}/inverse_slopes_{timestamp}.png', dpi=300)
-plt.close()
+# Save the slopes dataframe to a csv
+slopes_df.to_csv(f'{SAVE_FOLDER}/slopes_{timestamp}.csv', index=False)
