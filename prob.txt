@@ -1,0 +1,4 @@
+In a town there are two taxi companies: 30% yellow and 70% blue.
+In a hit and run accident, a witness claimed the taxi involved was yellow.
+After further stucies, it was discovered that the witness is correct at identifying color 75% of the time.
+what is the probability that the taxi in the accident was indeed yellow.
