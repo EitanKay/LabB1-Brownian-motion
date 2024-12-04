@@ -5,6 +5,7 @@ import os
 import time
 import warnings
 import math
+from scipy.optimize import curve_fit
 
 # Suppress FutureWarning
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -18,7 +19,7 @@ RADIUS_ERROR = 0.1E-6 #m
 MAX_WINDOW_SIZE = 25
 
 TEMP = 295 #K
-PARTICLES_TO_PLOT = 3
+PARTICLES_TO_PLOT = 1
 FPS = 3
 ERROR_TOLORENCE = 75E-14
 
@@ -36,6 +37,10 @@ RADIUS_DATA = ['Data/Radiuses.csv',
                'Data/Week_2/Radii.csv']
 
 CATEGORY_NAMES = ['0%', '10%', '20%', '30%', '40%', '50%']
+
+# LOCATION_DATA = ['Data/Edited_Data.csv']
+# RADIUS_DATA = ['Data/Radiuses.csv']
+# CATEGORY_NAMES = ['0%']
 
 # Create a new folder in Graphs with timestamp
 timestamp = time.strftime("%Y%m%d-%H%M%S")
@@ -94,6 +99,18 @@ def calculate_avg_displacement_squared(particle, data_df, window_size):
         #print(f'Columns {x_col} or {y_col} not found in data for particle {particle}')
         return None
 
+
+def linear_func_no_intercept(x, m):
+    """This function is used to fit a line to the data with the intercept forced to 0
+    """
+    return m * x
+
+def linear_func(x, m, c):
+    """This function is used to fit a line to the data
+    """
+    return m * x + c
+
+
 def plot_avg_displacement_squared(file_index: int):
     # Calculate and plot average displacement squared over time for each particle and window size
     LOCAL_SAVE_FOLDER = f"{SAVE_FOLDER}/{file_index}"
@@ -121,13 +138,14 @@ def plot_avg_displacement_squared(file_index: int):
         # print(f'Calculating avg displacement squared for particle {particle} with radius {radius}')
         
         avg_displacements = []
-        errors = []
+        errors = np.array([])
         for window_size in window_sizes:
             #print(f'******************\nCalculating avg displacement squared for particle {particle} with window size {window_size}\n*********************')
             avg_displacement_squared, std_error = calculate_avg_displacement_squared(particle, data_df, window_size)
             #if avg_displacement_squared is not None:
             avg_displacements.append(avg_displacement_squared)
-            errors.append(std_error)
+            #errors.append(std_error)
+            errors = np.append(errors, std_error)
         
         if avg_displacements:  # Ensure avg_displacements is not empty
         
@@ -135,41 +153,27 @@ def plot_avg_displacement_squared(file_index: int):
             x = np.array(window_sizes[:len(avg_displacements)])
             y = np.array(avg_displacements)
             
-            # Include the origin point (0, 0)
-            x = np.insert(x, 0, 0)
-            y = np.insert(y, 0, 0)
+            # Remove entries where y is NaN
+            mask = ~np.isnan(y)
+            x = x[mask]
+            y = y[mask]
+            errors = errors[mask]
+            
+            a_fit, cov = curve_fit(linear_func_no_intercept, x, y, sigma=errors, absolute_sigma=True, nan_policy='omit')
             
             
-            # Reshape x for lstsq
-            x = x[:, np.newaxis]
-            
-            # Use lstsq to fit the data with intercept forced to 0
-            m, _, _, _ = np.linalg.lstsq(x, y, rcond=None)
-            m = m[0]
-            
-            # calculate the error of the fit
-            # Calculate the fitted values
-            y_fit = m * x.flatten()
-            
-            # Calculate the residuals
-            residuals = y - y_fit
-            
-            # Calculate the standard error of the regression
-            residual_sum_of_squares = np.sum(residuals**2)
-            degrees_of_freedom = len(y) - 1  # Number of observations minus number of parameters
-            fit_error = np.sqrt(residual_sum_of_squares / degrees_of_freedom) / (np.sqrt(degrees_of_freedom+1))
+            m = a_fit[0]
+            fit_error = np.sqrt(cov[0, 0])
             
             
-            if count % PARTICLES_TO_PLOT == 0 and m and max(errors) < ERROR_TOLORENCE:
+            # Add the slope to the dataframe
+            if m and m > 1E-14 and (max(errors) < ERROR_TOLORENCE) and not np.isinf(fit_error) and fit_error < 1E-14:
                 
                 scatter = plt.scatter(window_sizes[:len(avg_displacements)], avg_displacements, label=f'P: {particle}, R:{radius:.2e}', s=5)
                 color = scatter.get_facecolor()[0]  # Get the color of the scatter plot
-                plt.errorbar(window_sizes[:len(avg_displacements)], avg_displacements, yerr=errors, fmt='o', color=color, capsize=5)
+                plt.errorbar(x,y, yerr=errors, fmt='o', color=color, capsize=5)
                 plt.plot(x, m*x, label=f'Fit: y = {m:.2e}x', linestyle='--', color=color)
-            count += 1    
-            
-            # Add the slope to the dataframe
-            if m and m > 1.7E-14 and (max(errors) < ERROR_TOLORENCE):
+                count += 1 
                 print(f'\033[92mParticle {particle} with slope {m:.2e} and fit error {fit_error:.2e} processed successfully\033[0m')
                 new_row = pd.DataFrame({'Particle': [particle], 'Radius': [radius], 'Slope': [m*FPS], 'Fit Error': [fit_error]})
     
@@ -201,44 +205,52 @@ def plot_avg_displacement_squared(file_index: int):
     # delete the temporary csv
     os.remove(f'{LOCAL_SAVE_FOLDER}/slopes_{timestamp}-temp.csv')
     
+
+    # Fit a line to the data with intercept forced to 0
+    x = slopes_df['Radius'].to_numpy()
+    y = slopes_df['Inverse Slope'].to_numpy()
+    errors = slopes_df['Inverse Slope Error'].to_numpy()
     
+    # assert to check for infinite values
+    assert not np.isinf(y).any(), "Infinite values found in y"
+    
+    # Remove entries where y is NaN
+    mask = ~np.isnan(y)
+    x = x[mask]
+    y = y[mask]
+    errors = errors[mask]
+
+    print(f"X: {x}")
+    print(f"Y: {y}")
+    print(f"Errors: {errors}")
+    
+    initial_guess = [5E18, -1E12]
+    bounds = ([0, -np.inf], [np.inf, np.inf])
+    a_fit, cov = curve_fit(linear_func, x, y,sigma=errors, absolute_sigma=True, nan_policy='omit',p0=initial_guess, maxfev=10000, bounds=bounds)
+
+    m = a_fit[0]
+    c = a_fit[1]
+    fit_error = np.sqrt(cov[0, 0])
+    intercept_error = np.sqrt(cov[1, 1])
+    
+    print(f"File index: {file_index}")
+    print(f"Slope: {m}")
+    print(f"Fit error: {fit_error}")
+    print(f"Intercept: {c}")
+    print(f"Intercept error: {intercept_error}")
+
+    # Ensure that x, y, and errors have the same shape
+    assert x.shape == y.shape == errors.shape, "Shapes of x, y, and errors do not match"
+
     # Plot 1/slope as a function of the radius
     plt.figure()
     #plt.scatter(slopes_df['Radius'], slopes_df['Inverse Slope'], marker='o', linestyle='-')
     xerr = [RADIUS_ERROR] * len(slopes_df['Radius'])
-    plt.errorbar(slopes_df['Radius'], slopes_df['Inverse Slope'], yerr=slopes_df ['Inverse Slope Error'], xerr=xerr, fmt='o', capsize=5)
-    plt.errorbar(slopes_df['Radius'], slopes_df['Inverse Slope'], yerr=slopes_df ['Inverse Slope Error'], fmt='o', capsize=5)
+    plt.errorbar(x,y,yerr=errors, xerr=xerr, fmt='o', capsize=5)
     plt.xlabel('Radius (m)')
     plt.ylabel('1/Slope (s/m^2)')
     plt.title(f'1/Slope vs Radius for {file_index}0% glycerol')
-
-    # Fit a line to the data with intercept forced to 0
-    x = slopes_df['Radius'].values
-    y = slopes_df['Inverse Slope'].values
-
-    # Include the origin point (0, 0)
-    x = np.insert(x, 0, 0)
-    y = np.insert(y, 0, 0)
-    # Reshape x for lstsq
-    x = x[:, np.newaxis]
-
-    # Use lstsq to fit the data with intercept forced to 0
-    m, _, _, _ = np.linalg.lstsq(x, y, rcond=None)
-    m = m[0]
-
-    # Calculate the fitted values
-    y_fit = m * x.flatten()
-    
-    # Calculate the residuals
-    residuals = y - y_fit
-    
-    # Calculate the standard error of the regression
-    residual_sum_of_squares = np.sum(residuals**2)
-    degrees_of_freedom = len(y) - 1  # Number of observations minus number of parameters
-    fit_error = (np.sqrt(residual_sum_of_squares / degrees_of_freedom) / (np.sqrt(np.sum((x - np.mean(x))**2)))) / np.sqrt(degrees_of_freedom+1)
-
-
-    plt.plot(x, m*x, label=f'Fit: y = {m:.2e}x +- {fit_error:.2e}x', linestyle='--')
+    plt.plot(x, m*x+c, label=f'Fit: y = {m:.2e}x +- {fit_error:.2e}x', linestyle='--')
     plt.legend()
     plt.savefig(f'{LOCAL_SAVE_FOLDER}/inverse_slope_vs_radius_{timestamp}.png', dpi=300)
     #plt.show()
