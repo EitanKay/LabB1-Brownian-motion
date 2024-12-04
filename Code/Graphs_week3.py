@@ -11,7 +11,7 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 
 
 GROUPING_THRESHOLD = 0.15E-6 #m
-MAXIMUM_RADIUS = 2.8E-6 #m
+MAXIMUM_RADIUS = 1 #m
 MINIMUM_RADIUS = 1.2E-6 #m
 PIXEL_SIZE = 0.102E-6 #m
 RADIUS_ERROR = 0.1E-6 #m
@@ -19,8 +19,9 @@ MAX_WINDOW_SIZE = 25
 
 TEMP = 295 #K
 PARTICLES_TO_PLOT = 3
-FPS = 3
-ERROR_TOLORENCE = 75E-14
+FPS = 29.86
+# ERROR_TOLORENCE = 75E-14
+ERROR_TOLORENCE  = 1
 
 LOCATION_DATA = ['Data/Week_3/Week3 data.csv']
 RADIUS_DATA = ['Data/Week_3/radii_Week3.csv']
@@ -36,13 +37,13 @@ def load_data(location_data: str, radius_data:str):
     
 # Load the data
 
-    radiuses_df = pd.read_csv(radius_data, header=None, names=['Particle', 'Radius'])
+    radiuses_df = pd.read_csv(radius_data, header=None, names=['Particle', 'Radius', 'Description'])
     data_df = pd.read_csv(location_data)
     print(f"Data loaded, files: {location_data}, {radius_data}")
 
     # Convert radiuses to meters from mm
     print(radiuses_df.head())
-    radiuses_df['Radius'] = radiuses_df['Radius'] * 1E-3
+    radiuses_df['Radius'] = radiuses_df['Radius'] * 1E-2
 
     # Convert pixel measurements to millimeters
     for col in data_df.columns:
@@ -178,6 +179,7 @@ def plot_avg_displacement_squared(file_index: int):
     LOCAL_SAVE_FOLDER = SAVE_FOLDER
     # os.makedirs(f"{SAVE_FOLDER}")
     data_df, radiuses_df = load_data(LOCATION_DATA[file_index], RADIUS_DATA[file_index])
+    print(radiuses_df)
     particles = radiuses_df['Particle'].values
     window_sizes = range(2, MAX_WINDOW_SIZE + 1)
     slopes_df = pd.DataFrame(columns=['Particle','Radius', 'Slope'])
@@ -185,6 +187,8 @@ def plot_avg_displacement_squared(file_index: int):
     count = 0
     for particle in particles:
         radius = radiuses_df.loc[radiuses_df['Particle'] == particle, 'Radius'].values[0]
+        print(radius)
+        desc = radiuses_df.loc[radiuses_df['Particle'] == particle, 'Description'].values[0]
         
         # Check if particle is in the data
         if f'Point-{particle} X' not in data_df.columns:
@@ -203,6 +207,7 @@ def plot_avg_displacement_squared(file_index: int):
         if avg_displacements:  # Ensure avg_displacements is not empty
             # Fit a line to the data, force the intercept to be 0
             x = np.array(window_sizes[:len(avg_displacements)])
+            x = (x / FPS)
             y = np.array(avg_displacements)
             
             # Include the origin point (0, 0)
@@ -227,37 +232,41 @@ def plot_avg_displacement_squared(file_index: int):
             degrees_of_freedom = len(y) - 1  # Number of observations minus number of parameters
             fit_error = np.sqrt(residual_sum_of_squares / degrees_of_freedom) / (np.sqrt(degrees_of_freedom + 1))
             
-            if count % PARTICLES_TO_PLOT == 0 and m and max(errors) < ERROR_TOLORENCE:
-                plt.figure()
-                scatter = plt.scatter(window_sizes[:len(avg_displacements)], avg_displacements, label=f'P: {particle}, R:{radius:.2e}', s=5)
-                color = scatter.get_facecolor()[0]  # Get the color of the scatter plot
-                plt.errorbar(window_sizes[:len(avg_displacements)], avg_displacements, yerr=errors, fmt='o', color=color, capsize=5)
-                plt.plot(x.flatten(), y_fit, label=f'Fit: y = {m:.2e}x', linestyle='--', color=color)
-                
-                # Add labels and title
-                plt.xlabel('Window Size')
-                plt.ylabel('Average Displacement Squared')
-                plt.title(f'Particle {particle} with Radius {radius}')
-                plt.legend()
-                
-                # Save the figure
-                plt.savefig(f'{LOCAL_SAVE_FOLDER}/particle_{particle}_radius_{radius}.png')
-                plt.close()
+            # if count % PARTICLES_TO_PLOT == 0 and m and max(errors) < ERROR_TOLORENCE:
+            plt.figure()
+            scatter = plt.scatter(x[:len(avg_displacements)], avg_displacements, label=f'P: {particle}, R:{radius:.2e}', s=5)
+            color = scatter.get_facecolor()[0]  # Get the color of the scatter plot
+            plt.errorbar(x[:len(avg_displacements)], avg_displacements, yerr=errors, fmt='o', color=color, capsize=5)
+            s_yx = np.sqrt(residual_sum_of_squares / degrees_of_freedom)
+            s_x_error = np.sqrt(np.sum((x-x)))
+            standard_error_m = (s_yx / np.sqrt(np.sum((x - np.mean(x))**2))) / np.sqrt(degrees_of_freedom+1)
+
+            plt.plot(x, y_fit, label=f'Fit: y = {m:.2e}x +- {standard_error_m:.2e}x', linestyle='--')
+            
+            # Add labels and title
+            plt.xlabel('Time (s)')
+            plt.ylabel('Average Displacement Squared (m^2)')
+            plt.title(f'{desc} (radius: {radius:.3f}m)')
+            plt.legend()
+            
+            # Save the figure
+            plt.savefig(f'{LOCAL_SAVE_FOLDER}/particle_{particle}_radius_{radius}.png')
+            plt.close()
             
             count += 1    
             
             # Add the slope to the dataframe
-            if m and m > 1.7E-14 and (max(errors) < ERROR_TOLORENCE):
-                print(f'\033[92mParticle {particle} with slope {m:.2e} and fit error {fit_error:.2e} processed successfully\033[0m')
-                new_row = pd.DataFrame({'Particle': [particle], 'Radius': [radius], 'Slope': [m*FPS], 'Fit Error': [fit_error]})
-    
-                # Check if new_row is empty or contains all-NA entries
-                if not new_row.empty and not new_row.isna().all().all():
-                    slopes_df = pd.concat([slopes_df, new_row], ignore_index=True)
-                else:
-                    print(f"Skipping empty or all-NA entry for particle {particle}")
+            # if m and m > 1.7E-14 and (max(errors) < ERROR_TOLORENCE):
+            print(f'\033[92mParticle {particle} with slope {m:.2e} and fit error {fit_error:.2e} processed successfully\033[0m')
+            new_row = pd.DataFrame({'Particle': [particle], 'Radius': [radius], 'Slope': [m*FPS], 'Fit Error': [fit_error]})
+
+            # Check if new_row is empty or contains all-NA entries
+            if not new_row.empty and not new_row.isna().all().all():
+                slopes_df = pd.concat([slopes_df, new_row], ignore_index=True)
             else:
-                print(f'\033[91mSkipping particle {particle} with slope {m:.2e} and max error {max(errors):.2e}\033[0m')
+                print(f"Skipping empty or all-NA entry for particle {particle}")
+            # else:
+            #     print(f'\033[91mSkipping particle {particle} with slope {m:.2e} and max error {max(errors):.2e}\033[0m')
         
 
     plt.xlabel(f'Frame (1/{FPS} s)')
@@ -312,8 +321,12 @@ def plot_avg_displacement_squared(file_index: int):
     degrees_of_freedom = len(y) - 1  # Number of observations minus number of parameters
     fit_error = (np.sqrt(residual_sum_of_squares / degrees_of_freedom) / (np.sqrt(np.sum((x - np.mean(x))**2)))) / np.sqrt(degrees_of_freedom+1)
 
+    s_yx = np.sqrt(residual_sum_of_squares / degrees_of_freedom)
+    standard_error_m = (s_yx / np.sqrt(np.sum((x - np.mean(x))**2))) / np.sqrt(degrees_of_freedom+1)
 
-    plt.plot(x, m*x, label=f'Fit: y = {m:.2e}x +- {fit_error:.2e}x', linestyle='--')
+    plt.plot(x, y_fit, label=f'Fit: y = {m:.2e}x +- {standard_error_m:.2e}x', linestyle='--')
+
+    # plt.plot(x, m*x, label=f'Fit: y = {m:.2e}x +- {fit_error:.2e}x', linestyle='--')
     plt.legend()
     plt.savefig(f'{LOCAL_SAVE_FOLDER}/inverse_slope_vs_radius_{timestamp}.png', dpi=300)
     #plt.show()
