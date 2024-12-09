@@ -11,22 +11,23 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 
 
 GROUPING_THRESHOLD = 0.15E-6 #m
-MAXIMUM_RADIUS = 1 #m
-MINIMUM_RADIUS = 1.2E-6 #m
-PIXEL_SIZE = 0.102E-6 #m
+MAXIMUM_RADIUS = 2.8 #m
+MINIMUM_RADIUS = 1.2E-10 #m
+PIXEL_SIZE = 0.0242 #m
 RADIUS_ERROR = 0.1E-6 #m
 MAX_WINDOW_SIZE = 25
+MIN_SLOPE = 0
 
 TEMP = 295 #K
-PARTICLES_TO_PLOT = 3
+PARTICLES_TO_PLOT = 1
 FPS = 29.86
-# ERROR_TOLORENCE = 75E-14
-ERROR_TOLORENCE  = 1
+ERROR_TOLORENCE = 75
 
-LOCATION_DATA = ['Data/Week_3/Week3 data.csv']
-RADIUS_DATA = ['Data/Week_3/radii_Week3.csv']
+LOCATION_DATA = ['Data/Week_4/data.csv']
+RADIUS_DATA = ['Data/Week_4/radii.csv']
 
 CATEGORY_NAMES = ['0%']
+
 
 # Create a new folder in Graphs with timestamp
 timestamp = time.strftime("%Y%m%d-%H%M%S")
@@ -55,7 +56,6 @@ def load_data(location_data: str, radius_data:str):
 
 # Function to calculate average displacement squared over time for a given window size
 def calculate_avg_displacement_squared(particle, data_df, window_size):
-    
     
     x_col = f'Point-{particle} X'
     y_col = f'Point-{particle} Y'
@@ -86,94 +86,7 @@ def calculate_avg_displacement_squared(particle, data_df, window_size):
         #print(f'Columns {x_col} or {y_col} not found in data for particle {particle}')
         return None
 
-# def plot_avg_displacement_squared(file_index: int):
-#     # Calculate and plot average displacement squared over time for each particle and window size
-#     LOCAL_SAVE_FOLDER = SAVE_FOLDER
-#     # os.makedirs(f"{SAVE_FOLDER}")
-#     data_df, radiuses_df = load_data(LOCATION_DATA[file_index], RADIUS_DATA[file_index])
-#     particles = radiuses_df['Particle'].values
-#     window_sizes = range(2, MAX_WINDOW_SIZE + 1)
-#     slopes_df = pd.DataFrame(columns=['Particle','Radius', 'Slope'])
 
-#     plt.figure()
-
-#     count = 0
-#     for particle in particles:
-#         radius = radiuses_df.loc[radiuses_df['Particle'] == particle, 'Radius'].values[0]
-        
-#         #check if particle is in the data
-#         if f'Point-{particle} X' not in data_df.columns:
-#             #print(f'Particle {particle} not found in data')
-#             continue
-        
-        
-#         if radius > MAXIMUM_RADIUS or radius < MINIMUM_RADIUS:
-#             # print(f'Skipping particle {particle} with radius {radius} (greater than MAXIMUM_RADIUS)')
-#             continue
-#         # print(f'Calculating avg displacement squared for particle {particle} with radius {radius}')
-        
-#         avg_displacements = []
-#         errors = []
-#         for window_size in window_sizes:
-#             #print(f'******************\nCalculating avg displacement squared for particle {particle} with window size {window_size}\n*********************')
-#             avg_displacement_squared, std_error = calculate_avg_displacement_squared(particle, data_df, window_size)
-#             #if avg_displacement_squared is not None:
-#             avg_displacements.append(avg_displacement_squared)
-#             errors.append(std_error)
-        
-#         if avg_displacements:  # Ensure avg_displacements is not empty
-        
-#             # fit a line to the data, force the intercept to be 0
-#             x = np.array(window_sizes[:len(avg_displacements)])
-#             y = np.array(avg_displacements)
-            
-#             # Include the origin point (0, 0)
-#             x = np.insert(x, 0, 0)
-#             y = np.insert(y, 0, 0)
-            
-            
-#             # Reshape x for lstsq
-#             x = x[:, np.newaxis]
-            
-#             # Use lstsq to fit the data with intercept forced to 0
-#             m, _, _, _ = np.linalg.lstsq(x, y, rcond=None)
-#             m = m[0]
-            
-#             # calculate the error of the fit
-#             # Calculate the fitted values
-#             y_fit = m * x.flatten()
-            
-#             # Calculate the residuals
-#             residuals = y - y_fit
-            
-#             # Calculate the standard error of the regression
-#             residual_sum_of_squares = np.sum(residuals**2)
-#             degrees_of_freedom = len(y) - 1  # Number of observations minus number of parameters
-#             fit_error = np.sqrt(residual_sum_of_squares / degrees_of_freedom) / (np.sqrt(degrees_of_freedom+1))
-            
-            
-#             if count % PARTICLES_TO_PLOT == 0 and m and max(errors) < ERROR_TOLORENCE:
-                
-#                 scatter = plt.scatter(window_sizes[:len(avg_displacements)], avg_displacements, label=f'P: {particle}, R:{radius:.2e}', s=5)
-#                 color = scatter.get_facecolor()[0]  # Get the color of the scatter plot
-#                 plt.errorbar(window_sizes[:len(avg_displacements)], avg_displacements, yerr=errors, fmt='o', color=color, capsize=5)
-#                 plt.plot(x, m*x, label=f'Fit: y = {m:.2e}x', linestyle='--', color=color)
-#             count += 1    
-            
-#             # Add the slope to the dataframe
-#             if m and m > 1.7E-14 and (max(errors) < ERROR_TOLORENCE):
-#                 print(f'\033[92mParticle {particle} with slope {m:.2e} and fit error {fit_error:.2e} processed successfully\033[0m')
-#                 new_row = pd.DataFrame({'Particle': [particle], 'Radius': [radius], 'Slope': [m*FPS], 'Fit Error': [fit_error]})
-    
-#                 # Check if new_row is empty or contains all-NA entries
-#                 if not new_row.empty and not new_row.isna().all().all():
-#                     slopes_df = pd.concat([slopes_df, new_row], ignore_index=True)
-#                 else:
-#                     print(f"Skipping empty or all-NA entry for particle {particle}")
-#             else:
-#                 #print short red color message
-#                 print(f'\033[91mSkipping particle {particle} with slope {m:.2e} and max error {max(errors):.2e}\033[0m')
-            
 def plot_avg_displacement_squared(file_index: int):
     # Calculate and plot average displacement squared over time for each particle and window size
     LOCAL_SAVE_FOLDER = SAVE_FOLDER
@@ -204,75 +117,142 @@ def plot_avg_displacement_squared(file_index: int):
             avg_displacements.append(avg_displacement_squared)
             errors.append(std_error)
         
+        # if avg_displacements:  # Ensure avg_displacements is not empty
+        #     # Fit a line to the data, force the intercept to be 0
+        #     x = np.array(window_sizes[:len(avg_displacements)])
+        #     x = (x / FPS)
+        #     y = np.array(avg_displacements)
+            
+        #     # Include the origin point (0, 0)
+        #     # x = np.insert(x, 0, 0)
+        #     # y = np.insert(y, 0, 0)
+            
+        #     # Reshape x for lstsq
+        #     x = x[:, np.newaxis]
+            
+        #     # Use lstsq to fit the data with intercept forced to 0
+        #     m, _, _, _ = np.linalg.lstsq(x, y, rcond=None)
+        #     m = m[0]
+            
+        #     # Calculate the fitted values
+        #     y_fit = m * x.flatten()
+            
+        #     # Calculate the residuals
+        #     residuals = y - y_fit
+            
+        #     # Calculate the standard error of the regression
+        #     residual_sum_of_squares = np.sum(residuals**2)
+        #     degrees_of_freedom = len(y) - 1  # Number of observations minus number of parameters
+        #     fit_error = np.sqrt(residual_sum_of_squares / degrees_of_freedom) / (np.sqrt(degrees_of_freedom + 1))
+            
+        #     # if count % PARTICLES_TO_PLOT == 0 and m and max(errors) < ERROR_TOLORENCE:
+        #     plt.figure()
+        #     scatter = plt.scatter(x[:len(errors)], y[:len(errors)], label=f'P: {particle}, R:{radius:.2e}', s=5)
+        #     color = scatter.get_facecolor()[0]  # Get the color of the scatter plot
+        #     plt.errorbar(x[:len(errors)],y[:len(errors)], yerr=errors, fmt='o', color=color, capsize=5)
+        #     s_yx = np.sqrt(residual_sum_of_squares / degrees_of_freedom)
+        #     s_x_error = np.sqrt(np.sum((x-x)))
+        #     standard_error_m = (s_yx / np.sqrt(np.sum((x - np.mean(x))**2))) / np.sqrt(degrees_of_freedom+1)
+
+        #     plt.plot(x, y_fit, label=f'Fit: y = {m:.2e}x +- {standard_error_m:.2e}x', linestyle='--')
+            
+        #     # Add labels and title
+        #     plt.xlabel('Time (s)')
+        #     plt.ylabel('Average Displacement Squared (m^2)')
+        #     plt.title(f'radius: {(100*radius):.3f}cm')
+        #     plt.legend()
+        #     plt.ticklabel_format(axis='y', style='scientific', scilimits=(-5, -5))
+
+        #     # Save the figure
+        #     plt.savefig(f'{LOCAL_SAVE_FOLDER}/particle_{particle}_radius_{radius}.png')
+        #     plt.close()
+            
+        #     count += 1    
+            
+        #     # Add the slope to the dataframe
+        #     # if m and m > 1.7E-14 and (max(errors) < ERROR_TOLORENCE):
+        #     print(f'\033[92mParticle {particle} with slope {m:.2e} and fit error {fit_error:.2e} processed successfully\033[0m')
+        #     new_row = pd.DataFrame({'Particle': [particle], 'Radius': [radius], 'Slope': [m*FPS], 'Fit Error': [fit_error]})
+
+        #     # Check if new_row is empty or contains all-NA entries
+        #     if not new_row.empty and not new_row.isna().all().all():
+        #         slopes_df = pd.concat([slopes_df, new_row], ignore_index=True)
+        #     else:
+        #         print(f"Skipping empty or all-NA entry for particle {particle}")
+        #     # else:
+        #     #     print(f'\033[91mSkipping particle {particle} with slope {m:.2e} and max error {max(errors):.2e}\033[0m')
+        
         if avg_displacements:  # Ensure avg_displacements is not empty
-            # Fit a line to the data, force the intercept to be 0
+            # Fit a line to the data, include both slope (m) and intercept (b)
             x = np.array(window_sizes[:len(avg_displacements)])
-            x = (x / FPS)
+            x = x / FPS  # Convert to time (s)
             y = np.array(avg_displacements)
-            
-            # Include the origin point (0, 0)
-            x = np.insert(x, 0, 0)
-            y = np.insert(y, 0, 0)
-            
-            # Reshape x for lstsq
-            x = x[:, np.newaxis]
-            
-            # Use lstsq to fit the data with intercept forced to 0
-            m, _, _, _ = np.linalg.lstsq(x, y, rcond=None)
-            m = m[0]
-            
+
+            # Create the design matrix with a column of ones for the intercept
+            X = np.column_stack((x, np.ones_like(x)))
+
+            # Use lstsq to fit the data
+            coef, _, _, _ = np.linalg.lstsq(X, y, rcond=None)
+            m, b = coef  # Extract slope and intercept
+
             # Calculate the fitted values
-            y_fit = m * x.flatten()
-            
+            y_fit = m * x + b
+
             # Calculate the residuals
             residuals = y - y_fit
-            
+
             # Calculate the standard error of the regression
             residual_sum_of_squares = np.sum(residuals**2)
-            degrees_of_freedom = len(y) - 1  # Number of observations minus number of parameters
-            fit_error = np.sqrt(residual_sum_of_squares / degrees_of_freedom) / (np.sqrt(degrees_of_freedom + 1))
-            
-            # if count % PARTICLES_TO_PLOT == 0 and m and max(errors) < ERROR_TOLORENCE:
+            degrees_of_freedom = len(y) - 2  # Number of observations minus number of parameters
+            s_yx = np.sqrt(residual_sum_of_squares / degrees_of_freedom)
+
+            # Standard errors for m and b
+            X_T_X_inv = np.linalg.inv(X.T @ X)  # Inverse of (X^T * X)
+            standard_errors = np.sqrt(np.diag(s_yx**2 * X_T_X_inv))
+            standard_error_m, standard_error_b = standard_errors
+
+            # Plot the data and the fit
             plt.figure()
             scatter = plt.scatter(x[:len(errors)], y[:len(errors)], label=f'P: {particle}, R:{radius:.2e}', s=5)
             color = scatter.get_facecolor()[0]  # Get the color of the scatter plot
-            plt.errorbar(x[:len(errors)],y[:len(errors)], yerr=errors, fmt='o', color=color, capsize=5)
-            s_yx = np.sqrt(residual_sum_of_squares / degrees_of_freedom)
-            s_x_error = np.sqrt(np.sum((x-x)))
-            standard_error_m = (s_yx / np.sqrt(np.sum((x - np.mean(x))**2))) / np.sqrt(degrees_of_freedom+1)
+            plt.errorbar(x[:len(errors)], y[:len(errors)], yerr=errors, fmt='o', color=color, capsize=5)
+            plt.plot(x, y_fit, label=f'Fit: y = {m:.2e}x + {b:.2e}\n± {standard_error_m:.2e}x ± {standard_error_b:.2e}', linestyle='--', color=color)
 
-            plt.plot(x, y_fit, label=f'Fit: y = {m:.2e}x +- {standard_error_m:.2e}x', linestyle='--')
-            
             # Add labels and title
             plt.xlabel('Time (s)')
-            plt.ylabel('Average Displacement Squared (m^2)')
-            plt.title(f'{desc} (radius: {radius:.3f}m)')
+            plt.ylabel('Average Displacement Squared (m²)')
+            plt.title(f'radius: {(100*radius):.3f}cm')
             plt.legend()
-            
+            plt.ticklabel_format(axis='y', style='scientific', scilimits=(-5, -5))
+
             # Save the figure
             plt.savefig(f'{LOCAL_SAVE_FOLDER}/particle_{particle}_radius_{radius}.png')
             plt.close()
-            
+
             count += 1    
-            
-            # Add the slope to the dataframe
-            # if m and m > 1.7E-14 and (max(errors) < ERROR_TOLORENCE):
-            print(f'\033[92mParticle {particle} with slope {m:.2e} and fit error {fit_error:.2e} processed successfully\033[0m')
-            new_row = pd.DataFrame({'Particle': [particle], 'Radius': [radius], 'Slope': [m*FPS], 'Fit Error': [fit_error]})
+
+            # Add the slope and intercept to the dataframe
+            print(f'\033[92mParticle {particle} with slope {m:.2e}, intercept {b:.2e}, and fit error {s_yx:.2e} processed successfully\033[0m')
+            new_row = pd.DataFrame({'Particle': [particle], 
+                                    'Radius': [radius], 
+                                    'Slope': [m * FPS], 
+                                    # 'Intercept': [b], 
+                                    'Fit Error': [standard_error_m], 
+                                    # 'Intercept Error': [standard_error_b]
+                                   })
 
             # Check if new_row is empty or contains all-NA entries
             if not new_row.empty and not new_row.isna().all().all():
                 slopes_df = pd.concat([slopes_df, new_row], ignore_index=True)
             else:
                 print(f"Skipping empty or all-NA entry for particle {particle}")
-            # else:
-            #     print(f'\033[91mSkipping particle {particle} with slope {m:.2e} and max error {max(errors):.2e}\033[0m')
-        
+
 
     plt.xlabel(f'Frame (1/{FPS} s)')
     plt.ylabel('Average Displacement Squared (m^2)')
     plt.legend(fontsize='small')
     plt.title('Avg Displacement Squared vs time')
+
     plt.savefig(f'{LOCAL_SAVE_FOLDER}/avg_displacement_squared_all_particles_{timestamp}.png', dpi=300)
 
     # export the data to a csv
@@ -294,43 +274,82 @@ def plot_avg_displacement_squared(file_index: int):
     plt.errorbar(slopes_df['Radius'], slopes_df['Inverse Slope'], yerr=slopes_df ['Inverse Slope Error'], fmt='o', capsize=5)
     plt.xlabel('Radius (m)')
     plt.ylabel('1/Slope (s/m^2)')
-    plt.title(f'1/Slope vs Radius for {file_index}0% glycerol')
+    plt.title(f'1/Slope vs Radius for foam on salt')
 
-    # Fit a line to the data with intercept forced to 0
-    x = slopes_df['Radius'].values
-    y = slopes_df['Inverse Slope'].values
+    # # Fit a line to the data with intercept forced to 0
+    # x = slopes_df['Radius'].values
+    # y = slopes_df['Inverse Slope'].values
 
-    # Include the origin point (0, 0)
-    x = np.insert(x, 0, 0)
-    y = np.insert(y, 0, 0)
-    # Reshape x for lstsq
-    x = x[:, np.newaxis]
+    # # Include the origin point (0, 0)
+    # # x = np.insert(x, 0, 0)
+    # # y = np.insert(y, 0, 0)
+    # # Reshape x for lstsq
+    # # x = x[:, np.newaxis]
+    # x = np.column_stack((x, np.ones(len(x))))
+    # # for i in range(len(x)):
+    #     print(f"x: {x[i]}, y: {y[i]}")
+
 
     # Use lstsq to fit the data with intercept forced to 0
-    m, _, _, _ = np.linalg.lstsq(x, y, rcond=None)
-    m = m[0]
+    # m, _, _, _ = np.linalg.lstsq(x, y, rcond=None)
+    # m = m[0]
 
     # Calculate the fitted values
-    y_fit = m * x.flatten()
-    
-    # Calculate the residuals
+    # y_fit = m * x.flatten()
+                # Use lstsq to fit the data
+    x = slopes_df['Radius'].values  # Independent variable
+    y = slopes_df['Inverse Slope'].values  # Dependent variable
+
+    # Ensure x is 2D (for lstsq)
+    X = np.column_stack((x, np.ones(len(x))))  # Add a column of ones for the intercept
+
+    # Solve the least squares problem
+    coef, _, _, _ = np.linalg.lstsq(X, y, rcond=None)
+    m, b = coef  # Slope (m) and intercept (b)
+
+    # Calculate the fitted values
+    y_fit = m * x + b
+
+    coef, _, _, _ = np.linalg.lstsq(X, y, rcond=None)
+    y = y
+    m, b = coef  # Extract slope and intercept
+
+    # Calculate the fitted values
+    y_fit = m * x + b
     residuals = y - y_fit
-    
-    # Calculate the standard error of the regression
     residual_sum_of_squares = np.sum(residuals**2)
-    degrees_of_freedom = len(y) - 1  # Number of observations minus number of parameters
-    fit_error = (np.sqrt(residual_sum_of_squares / degrees_of_freedom) / (np.sqrt(np.sum((x - np.mean(x))**2)))) / np.sqrt(degrees_of_freedom+1)
+    degrees_of_freedom = len(y) - 2  # Number of observations minus number of parameters
+    fit_error = np.sqrt(residual_sum_of_squares / degrees_of_freedom)
 
-    s_yx = np.sqrt(residual_sum_of_squares / degrees_of_freedom)
-    standard_error_m = (s_yx / np.sqrt(np.sum((x - np.mean(x))**2))) / np.sqrt(degrees_of_freedom+1)
-
-    plt.plot(x, y_fit, label=f'Fit: y = {m:.2e}x +- {standard_error_m:.2e}x', linestyle='--')
-
-    # plt.plot(x, m*x, label=f'Fit: y = {m:.2e}x +- {fit_error:.2e}x', linestyle='--')
+    # Plot the fit
+    plt.plot(x, y_fit, label=f'Fit: y = {m:.2e}x + {b:.2e}', linestyle='--')
+    plt.errorbar(slopes_df['Radius'], slopes_df['Inverse Slope'], yerr=slopes_df['Inverse Slope Error'], fmt='o', capsize=5)
+    plt.xlabel('Radius (m)')
+    plt.ylabel('1/Slope (s/m^2)')
+    plt.title(f'1/Slope vs Radius for foam on salt')
     plt.legend()
     plt.savefig(f'{LOCAL_SAVE_FOLDER}/inverse_slope_vs_radius_{timestamp}.png', dpi=300)
-    #plt.show()
     plt.close()
+
+    
+    # # Calculate the residuals
+    # residuals = y - y_fit
+    
+    # # Calculate the standard error of the regression
+    # residual_sum_of_squares = np.sum(residuals**2)
+    # degrees_of_freedom = len(y) - 1  # Number of observations minus number of parameters
+    # fit_error = (np.sqrt(residual_sum_of_squares / degrees_of_freedom) / (np.sqrt(np.sum((x - np.mean(x))**2)))) / np.sqrt(degrees_of_freedom+1)
+
+    # s_yx = np.sqrt(residual_sum_of_squares / degrees_of_freedom)
+    # standard_error_m = (s_yx / np.sqrt(np.sum((x - np.mean(x))**2))) / np.sqrt(degrees_of_freedom+1)
+
+    # plt.plot(x, y_fit, label=f'Fit: y = {m:.2e}x +- {standard_error_m:.2e}x', linestyle='--')
+
+    # # plt.plot(x, m*x, label=f'Fit: y = {m:.2e}x +- {fit_error:.2e}x', linestyle='--')
+    # plt.legend()
+    # plt.savefig(f'{LOCAL_SAVE_FOLDER}/inverse_slope_vs_radius_{timestamp}.png', dpi=300)
+    # #plt.show()
+    # plt.close()
 
     # Save the slopes dataframe to a csv
     slopes_df.to_csv(f'{LOCAL_SAVE_FOLDER}/slopes_{timestamp}.csv', index=False)

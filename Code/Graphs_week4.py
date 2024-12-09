@@ -224,6 +224,7 @@ def plot_avg_displacement_squared(file_index: int):
     y = np.insert(y, 0, 0)
     # Reshape x for lstsq
     x = x[:, np.newaxis]
+    
 
     # Use lstsq to fit the data with intercept forced to 0
     m, _, _, _ = np.linalg.lstsq(x, y, rcond=None)
