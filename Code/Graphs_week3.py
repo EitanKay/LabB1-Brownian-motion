@@ -97,6 +97,21 @@ def linear_func(x, m, c):
     """This function is used to fit a line to the data
     """
     return m * x + c
+
+def gaussian_func(x, m, s):
+    """
+    Calculate the Gaussian function values for the input array x.
+
+    Parameters:
+        m (float): Mean of the Gaussian distribution.
+        s (float): Standard deviation of the Gaussian distribution.
+        x (numpy.ndarray): Input array of x values.
+
+    Returns:
+        numpy.ndarray: Values of the Gaussian function for the input x.
+    """
+    return (1 / (np.sqrt(2 * np.pi) * s)) * np.exp(-0.5 * ((x - m) / s) ** 2)
+
             
 def plot_avg_displacement_squared(file_index: int):
     # Calculate and plot average displacement squared over time for each particle and window size
@@ -230,12 +245,39 @@ def gaussian(data, desc, LOCAL_SAVE_FOLDER):
         else:
             distances[dist] += 1
         i+= 2
+        
+    
+    x = np.array(list(distances.keys()))
+    y = np.array(list(distances.values()))
+    print("x: ",x,"y: ", y)
+    
+    initial_guess = [np.mean(x), np.std(x)]
+    
+    
+    a_fit, cov = curve_fit(gaussian_func, x, y,p0=initial_guess, nan_policy='omit')
+    
+    print(a_fit)
+    m = a_fit[0]
+    s = a_fit[1]
+    print("GAUSSIAN: ", gaussian_func(x, m, s))
+    print("m: ", m,"s: ",s)
+    print(f"mean: {np.mean(x)}, std: {np.std(x)}")
+    fit_error = np.sqrt(cov[0, 0])
+    
     plt.figure()
-    plt.bar(distances.keys(), distances.values(), width=0.0001)
-    left = np.abs(max(-0.01,min(distances.keys())))
-    right = min(0.01, max(distances.keys()))
+    plt.bar(x, y, width=0.0001)
+
+    g = gaussian_func(x, m, s)
+    plt.scatter(x, g)
+    left = np.abs(max(-0.01,min(x)))
+    right = min(0.01, max(x))
     lim = max(left, right)
     plt.xlim(left=-lim , right=lim)
+    
+    j = 0
+    while j < len(x):
+        print(f"gaussian for {x[j]}: {g[j]}")
+        j+= 1
 
     # plt.title(desc)
     plt.xlabel("distance (cm)")

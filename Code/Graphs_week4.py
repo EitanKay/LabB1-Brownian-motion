@@ -28,8 +28,8 @@ FPS = 3
 ERROR_TOLORENCE = 35
 
 
-LOCATION_DATA = ['Data/Week_4/data.csv']
-RADIUS_DATA = ['Data/Week_4/radii.csv']
+LOCATION_DATA = ['Data/Week_5/data.csv']
+RADIUS_DATA = ['Data/Week_5/radii.csv']
 
 
 
